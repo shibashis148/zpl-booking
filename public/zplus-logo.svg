@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 810 679" role="img" aria-label="ZPlusLimo">
+  <defs>
+    <linearGradient id="zplusGradient" x1="43" y1="338" x2="769" y2="338" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6a12f"/>
+      <stop offset="0.29" stop-color="#fff52d"/>
+      <stop offset="0.58" stop-color="#f4ab3e"/>
+      <stop offset="1" stop-color="#f29a22"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#zplusGradient)" d="M643 97H232L119 292L270 168L442 169L43 636Z"/>
+  <path fill="url(#zplusGradient)" d="M768 41L167 580H578L691 385L540 509L377 508Z"/>
+</svg>

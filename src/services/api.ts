@@ -147,8 +147,8 @@ export function listPartners(activeOnly = true): Promise<Paginated<Partner>> { r
 export function createPartner(payload: Omit<Partner, 'id' | 'contactsCount'>): Promise<Partner> { return request('/dashboard/booking-partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function updatePartner(id: number, payload: Omit<Partner, 'id' | 'contactsCount'>): Promise<Partner> { return request(`/dashboard/booking-partners/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 
-export function listBookings(values: { page?: number; q?: string; status?: string } = {}): Promise<Paginated<Booking>> {
-  return request(`/dashboard/bookings${query({ page: values.page || 1, page_size: 25, q: values.q, status: values.status })}`);
+export function listBookings(values: { page?: number; q?: string; status?: string; createdByMe?: boolean } = {}): Promise<Paginated<Booking>> {
+  return request(`/dashboard/bookings${query({ page: values.page || 1, page_size: 25, q: values.q, status: values.status, created_by_me: values.createdByMe })}`);
 }
 export function createBooking(payload: BookingPayload): Promise<Booking> { return request('/dashboard/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function updateBooking(id: number | string, payload: Record<string, unknown>): Promise<Booking> { return request(`/dashboard/bookings/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }

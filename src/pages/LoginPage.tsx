@@ -1,4 +1,4 @@
-import { ArrowRight, Eye, EyeSlash, LockSimple, EnvelopeSimple, WarningCircle } from '@phosphor-icons/react';
+import { ArrowRight, Eye, EyeSlash, LockSimple, EnvelopeSimple, Spinner, WarningCircle } from '@phosphor-icons/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -35,7 +35,7 @@ export default function LoginPage() {
         <label><span className="label">Password</span><div className="relative"><LockSimple className="absolute left-3.5 top-3.5 text-slate-400" size={19} /><input required type={show ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className="field pl-11 pr-11" /><button type="button" onClick={() => setShow(!show)} className="absolute right-3.5 top-3.5 text-slate-400">{show ? <EyeSlash /> : <Eye />}</button></div></label>
         <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="accent-gold" /> Remember this device</label>
         {error && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"><WarningCircle size={19} />{error}</div>}
-        <button disabled={busy} className="btn-primary h-12 w-full">{busy ? 'Signing in…' : <>Sign in <ArrowRight weight="bold" /></>}</button>
+        <button disabled={busy} className="btn-primary h-12 w-full">{busy ? <><Spinner className="animate-spin" /> Signing in…</> : <>Sign in <ArrowRight weight="bold" /></>}</button>
       </form>
       <p className="mt-7 text-center text-xs text-slate-400">Accounts are created by an administrator in the main Z Plus dashboard.</p>
     </div></section>

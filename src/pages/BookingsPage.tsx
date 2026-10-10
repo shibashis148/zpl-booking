@@ -25,7 +25,7 @@ export default function BookingsPage() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [editing, setEditing] = useState<Booking | null>(null);
@@ -33,7 +33,7 @@ export default function BookingsPage() {
   const load = async () => {
     setLoading(true); setError('');
     try {
-      const result = await listBookings({ page, q: appliedQuery, status });
+      const result = await listBookings({ page, q: appliedQuery, status, createdByMe: true });
       setRows(result.items); setPages(result.total_pages);
       if (result.items.length) {
         const values = await finance(result.items.map((row) => row.id));
@@ -52,41 +52,46 @@ export default function BookingsPage() {
     return () => { active = false; };
   }, []);
 
-  const action = async (tripId: number, task: () => Promise<void>) => {
-    setBusyId(tripId); setError(''); setMessage('');
-    try { await task(); await load(); }
+  const action = async (key: string, task: () => Promise<void>, reload = true) => {
+    setBusyAction(key); setError(''); setMessage('');
+    try { await task(); if (reload) await load(); }
     catch (value) { setError(value instanceof Error ? value.message : 'Action failed.'); }
-    finally { setBusyId(null); }
+    finally { setBusyAction(null); }
   };
-  const makePayment = async (row: Booking) => action(Number(row.id), async () => {
+  const makePayment = async (row: Booking) => action(`${row.id}:payment`, async () => {
     const value = await createPaymentLink(row.id, row.fare);
     await navigator.clipboard.writeText(value.paymentLink);
     setMessage('Payment link created and copied. Invoice issued automatically.');
   });
   const copy = async (value: string, label: string) => { await navigator.clipboard.writeText(value); setMessage(`${label} copied.`); };
-  const share = async (entry: TripFinance) => {
+  const share = async (row: Booking, entry: TripFinance) => action(`${row.id}:invoice-share`, async () => {
     if (!entry.invoice) return;
     const result = await shareInvoice(entry.invoice.id);
     if (navigator.share) await navigator.share({ title: entry.invoice.invoiceNo, text: 'Z Plus Limousine invoice', url: result.url });
     else await copy(result.url, 'Invoice link');
-  };
+  }, false);
+  const download = async (row: Booking, entry: TripFinance) => action(`${row.id}:invoice-download`, async () => {
+    if (!entry.invoice) return;
+    await downloadInvoice(entry.invoice.id, entry.invoice.invoiceNo);
+    setMessage('Invoice downloaded.');
+  }, false);
 
   const paid = Object.values(money).filter((value) => value.payment?.status === 'paid').length;
   const links = Object.values(money).filter((value) => value.payment).length;
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4">
-      <div><p className="text-xs font-bold uppercase tracking-[.18em] text-gold-dark">Operations</p><h1 className="mt-1 font-display text-3xl font-extrabold">Trips & payments</h1><p className="mt-2 text-sm text-slate-500">The same core trips, with assignment, payment and invoice status together.</p></div>
+      <div><p className="text-xs font-bold uppercase tracking-[.18em] text-gold-dark">Operations</p><h1 className="mt-1 font-display text-3xl font-extrabold">My trips & payments</h1><p className="mt-2 text-sm text-slate-500">Bookings created by your account, with assignment, payment and invoice status together.</p></div>
       <Link to="/new" className="btn-gold"><Plus weight="bold" /> New booking</Link>
     </div>
     <div className="grid gap-3 sm:grid-cols-3"><Summary label="Bookings on this page" value={rows.length} /><Summary label="Payment links" value={links} /><Summary label="Paid" value={paid} positive /></div>
     {message && <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700"><CheckCircle />{message}</div>}
     {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}
-    <div className="card p-4"><form onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }} className="flex flex-wrap gap-3"><div className="relative min-w-[240px] flex-1"><MagnifyingGlass className="absolute left-3.5 top-3 text-slate-400" /><input className="field py-2.5 pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Customer, phone, route, driver or partner" /></div><select className="field w-auto min-w-40 py-2.5" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All trip statuses</option><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><button className="btn-primary py-2.5">Search</button></form></div>
+    <div className="card p-4"><form onSubmit={(event) => { event.preventDefault(); setPage(1); setAppliedQuery(query.trim()); }} className="flex flex-wrap gap-3"><div className="relative min-w-[240px] flex-1"><MagnifyingGlass className="absolute left-3.5 top-3 text-slate-400" /><input className="field py-2.5 pl-10" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Customer, phone, route, driver or partner" /></div><select className="field w-auto min-w-40 py-2.5" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">All trip statuses</option><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select><button disabled={loading} className="btn-primary py-2.5">{loading && <Spinner className="animate-spin" />} Search</button></form></div>
     <div className="card overflow-hidden"><div className="overflow-x-auto"><table className="min-w-full text-left text-sm">
       <thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-4 py-3">Trip</th><th className="px-4 py-3">Customer & route</th><th className="px-4 py-3">Assignment</th><th className="px-4 py-3">Payment</th><th className="px-4 py-3">Invoice</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
-      <tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan={6} className="py-16 text-center"><Spinner className="mx-auto animate-spin text-gold-dark" size={28} /></td></tr> : rows.length ? rows.map((row) => <BookingRow key={row.id} row={row} entry={money[Number(row.id)]} busy={busyId === Number(row.id)} onAction={action} onPayment={makePayment} onCopy={copy} onShare={share} onEdit={setEditing} />) : <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-500">No bookings match these filters.</td></tr>}</tbody>
-    </table></div><div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-500"><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="btn-secondary px-3 py-2">Previous</button><span>Page {page} of {pages}</span><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} className="btn-secondary px-3 py-2">Next</button></div></div>
+      <tbody className="divide-y divide-slate-100">{loading ? <tr><td colSpan={6} className="py-16 text-center"><Spinner className="mx-auto animate-spin text-gold-dark" size={28} /></td></tr> : rows.length ? rows.map((row) => <BookingRow key={row.id} row={row} entry={money[Number(row.id)]} busyAction={busyAction} onAction={action} onPayment={makePayment} onCopy={copy} onShare={share} onDownload={download} onEdit={setEditing} />) : <tr><td colSpan={6} className="px-4 py-16 text-center text-slate-500">You have not created any bookings matching these filters.</td></tr>}</tbody>
+    </table></div><div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-sm text-slate-500"><button disabled={loading || page <= 1} onClick={() => setPage((value) => value - 1)} className="btn-secondary px-3 py-2">{loading && page > 1 && <Spinner className="animate-spin" />} Previous</button><span>Page {page} of {pages}</span><button disabled={loading || page >= pages} onClick={() => setPage((value) => value + 1)} className="btn-secondary px-3 py-2">Next {loading && page < pages && <Spinner className="animate-spin" />}</button></div></div>
     {editing && <EditBooking booking={editing} drivers={drivers} vehicles={vehicles} partners={partners} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); setMessage('Booking updated.'); await load(); }} />}
   </div>;
 }
@@ -96,22 +101,24 @@ function Summary({ label, value, positive = false }: { label: string; value: num
 }
 
 type RowProps = {
-  row: Booking; entry?: TripFinance; busy: boolean;
-  onAction: (tripId: number, task: () => Promise<void>) => Promise<void>;
+  row: Booking; entry?: TripFinance; busyAction: string | null;
+  onAction: (key: string, task: () => Promise<void>, reload?: boolean) => Promise<void>;
   onPayment: (row: Booking) => Promise<void>;
   onCopy: (value: string, label: string) => Promise<void>;
-  onShare: (entry: TripFinance) => Promise<void>;
+  onShare: (row: Booking, entry: TripFinance) => Promise<void>;
+  onDownload: (row: Booking, entry: TripFinance) => Promise<void>;
   onEdit: (row: Booking) => void;
 };
 
-function BookingRow({ row, entry, busy, onAction, onPayment, onCopy, onShare, onEdit }: RowProps) {
+function BookingRow({ row, entry, busyAction, onAction, onPayment, onCopy, onShare, onDownload, onEdit }: RowProps) {
+  const busy = (name: string) => busyAction === `${row.id}:${name}`;
   return <tr className="align-top hover:bg-slate-50/60">
     <td className="whitespace-nowrap px-4 py-4"><strong className="block">#{row.id}</strong><span className={`pill mt-2 ${statusStyle[row.status] || 'bg-slate-100 text-slate-600'}`}>{row.status.replaceAll('_', ' ')}</span><span className="mt-2 block text-xs text-slate-500">{formatDate(row.scheduledAt)}</span></td>
     <td className="max-w-sm px-4 py-4"><strong>{row.customerName}</strong><span className="block text-xs text-slate-500">{row.customerPhone}</span><p className="mt-2 truncate text-xs text-slate-700">{row.pickup.address}</p><p className="truncate text-xs text-slate-400">→ {row.drop.address}</p><p className="mt-2 font-bold">AED {row.fare.toLocaleString('en-AE')}</p></td>
-    <td className="px-4 py-4"><strong className="block">{row.driverName || 'Unassigned'}</strong><span className="text-xs text-slate-500">{row.vehiclePlate || 'No vehicle'} · {row.vehicleModel || ''}</span><span className="mt-2 block text-xs text-slate-500">{row.partnerName || 'Direct booking'}</span><button disabled={busy} onClick={() => void onAction(Number(row.id), async () => { const result = await notifyDriver(row.id); if (!result.sent) throw new Error(result.reason || 'Notification was not sent.'); })} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-700"><BellRinging /> Notify driver</button></td>
-    <td className="px-4 py-4">{entry?.payment ? <><span className={`pill ${statusStyle[entry.payment.status] || 'bg-slate-100 text-slate-600'}`}>{entry.payment.status.replaceAll('_', ' ')}</span><span className="mt-2 block text-xs text-slate-500">{entry.payment.currency} {entry.payment.amount.toLocaleString('en-AE')}</span><div className="mt-2 flex flex-wrap gap-3"><button onClick={() => void onCopy(entry.payment!.paymentLink, 'Payment link')} className="inline-flex items-center gap-1 text-xs font-bold text-gold-dark"><ClipboardText /> Copy</button><button disabled={busy} onClick={() => void onAction(Number(row.id), async () => { await refreshPayment(entry.payment!.id); })} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700"><ArrowClockwise /> Refresh</button></div></> : <><span className="text-xs text-slate-400">No payment link</span><button disabled={busy} onClick={() => void onPayment(row)} className="mt-2 block text-xs font-bold text-gold-dark"><LinkSimple className="inline" /> Create link</button></>}</td>
-    <td className="px-4 py-4">{entry?.invoice ? <><strong className="block text-xs">{entry.invoice.invoiceNo}</strong><span className={`pill mt-2 ${statusStyle[entry.invoice.status] || 'bg-slate-100 text-slate-600'}`}>{entry.invoice.status}</span><div className="mt-2 flex gap-3"><button onClick={() => void downloadInvoice(entry.invoice!.id, entry.invoice!.invoiceNo)} title="Download invoice" className="text-slate-600 hover:text-navy"><DownloadSimple size={18} /></button><button onClick={() => void onShare(entry)} title="Share invoice" className="text-slate-600 hover:text-navy"><FileArrowUp size={18} /></button></div></> : <span className="text-xs text-slate-400">Created with payment link</span>}</td>
-    <td className="px-4 py-4 text-right"><button onClick={() => onEdit(row)} className="btn-secondary px-3 py-2"><PencilSimple /> Edit</button>{entry?.payment && !['paid', 'pending'].includes(entry.payment.status) && <button disabled={busy} onClick={() => void onPayment(row)} className="mt-2 block w-full text-xs font-bold text-gold-dark">New payment link</button>}</td>
+    <td className="px-4 py-4"><strong className="block">{row.driverName || 'Unassigned'}</strong><span className="text-xs text-slate-500">{row.vehiclePlate || 'No vehicle'} · {row.vehicleModel || ''}</span><span className="mt-2 block text-xs text-slate-500">{row.partnerName || 'Direct booking'}</span><button disabled={busy('notify')} onClick={() => void onAction(`${row.id}:notify`, async () => { const result = await notifyDriver(row.id); if (!result.sent) throw new Error(result.reason || 'Notification was not sent.'); })} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-700 disabled:opacity-50">{busy('notify') ? <Spinner className="animate-spin" /> : <BellRinging />} {busy('notify') ? 'Sending…' : 'Notify driver'}</button></td>
+    <td className="px-4 py-4">{entry?.payment ? <><span className={`pill ${statusStyle[entry.payment.status] || 'bg-slate-100 text-slate-600'}`}>{entry.payment.status.replaceAll('_', ' ')}</span><span className="mt-2 block text-xs text-slate-500">{entry.payment.currency} {entry.payment.amount.toLocaleString('en-AE')}</span><div className="mt-2 flex flex-wrap gap-3"><button onClick={() => void onCopy(entry.payment!.paymentLink, 'Payment link')} className="inline-flex items-center gap-1 text-xs font-bold text-gold-dark"><ClipboardText /> Copy</button><button disabled={busy('refresh')} onClick={() => void onAction(`${row.id}:refresh`, async () => { await refreshPayment(entry.payment!.id); })} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 disabled:opacity-50">{busy('refresh') ? <Spinner className="animate-spin" /> : <ArrowClockwise />} {busy('refresh') ? 'Refreshing…' : 'Refresh'}</button></div></> : <><span className="text-xs text-slate-400">No payment link</span><button disabled={busy('payment')} onClick={() => void onPayment(row)} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-gold-dark disabled:opacity-50">{busy('payment') ? <Spinner className="animate-spin" /> : <LinkSimple />} {busy('payment') ? 'Creating…' : 'Create link'}</button></>}</td>
+    <td className="px-4 py-4">{entry?.invoice ? <><strong className="block text-xs">{entry.invoice.invoiceNo}</strong><span className={`pill mt-2 ${statusStyle[entry.invoice.status] || 'bg-slate-100 text-slate-600'}`}>{entry.invoice.status}</span><div className="mt-2 flex gap-3"><button disabled={busy('invoice-download')} onClick={() => void onDownload(row, entry)} title="Download invoice" className="text-slate-600 hover:text-navy disabled:opacity-50">{busy('invoice-download') ? <Spinner className="animate-spin" size={18} /> : <DownloadSimple size={18} />}</button><button disabled={busy('invoice-share')} onClick={() => void onShare(row, entry)} title="Share invoice" className="text-slate-600 hover:text-navy disabled:opacity-50">{busy('invoice-share') ? <Spinner className="animate-spin" size={18} /> : <FileArrowUp size={18} />}</button></div></> : <span className="text-xs text-slate-400">Created with payment link</span>}</td>
+    <td className="px-4 py-4 text-right"><button onClick={() => onEdit(row)} className="btn-secondary px-3 py-2"><PencilSimple /> Edit</button>{entry?.payment && !['paid', 'pending'].includes(entry.payment.status) && <button disabled={busy('payment')} onClick={() => void onPayment(row)} className="mt-2 inline-flex w-full items-center justify-center gap-1 text-xs font-bold text-gold-dark disabled:opacity-50">{busy('payment') && <Spinner className="animate-spin" />} {busy('payment') ? 'Creating…' : 'New payment link'}</button>}</td>
   </tr>;
 }
 

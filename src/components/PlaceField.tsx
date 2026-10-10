@@ -11,6 +11,7 @@ export default function PlaceField({ label, value, onChange }: { label: string; 
   const [error, setError] = useState('');
   const fieldId = useId();
   const root = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
   const session = useRef('');
   const sequence = useRef(0);
   const editing = useRef(false);
@@ -69,26 +70,29 @@ export default function PlaceField({ label, value, onChange }: { label: string; 
   }, [text]);
 
   const choose = async (item: PlaceSuggestion) => {
-    sequence.current += 1;
+    const selection = ++sequence.current;
     editing.current = false;
     setSearching(false);
     setSelecting(true);
-    setText(item.description);
+    const selectedLabel = item.description.trim() || [item.mainText, item.secondaryText].filter(Boolean).join(', ');
+    setText(selectedLabel);
     setItems([]);
     setOpen(false);
     setError('');
+    input.current?.blur();
     try {
       const details = await placeDetails(item.placeId, session.current);
-      const address = details.address || item.description;
-      setText(address);
-      onChange({ address, label, lat: details.lat, lng: details.lng });
+      if (sequence.current !== selection || editing.current) return;
+      setSelecting(false);
+      setText(selectedLabel);
+      onChange({ address: selectedLabel, label, lat: details.lat, lng: details.lng });
       session.current = globalThis.crypto.randomUUID();
     } catch (value) {
+      if (sequence.current !== selection) return;
+      setSelecting(false);
       editing.current = true;
       onChange(null);
       setError(value instanceof Error ? value.message : 'Could not select this place. Please try again.');
-    } finally {
-      setSelecting(false);
     }
   };
 
@@ -99,6 +103,7 @@ export default function PlaceField({ label, value, onChange }: { label: string; 
     setItems([]);
     setOpen(false);
     setSearching(false);
+    setSelecting(false);
     setError('');
     onChange(null);
   };
@@ -109,6 +114,7 @@ export default function PlaceField({ label, value, onChange }: { label: string; 
       <MapPin className="pointer-events-none absolute left-3.5 top-3.5 text-gold-dark" size={19} />
       <input
         id={fieldId}
+        ref={input}
         role="combobox"
         aria-expanded={open}
         aria-controls={`${fieldId}-listbox`}
@@ -120,6 +126,7 @@ export default function PlaceField({ label, value, onChange }: { label: string; 
         onChange={(event) => {
           editing.current = true;
           sequence.current += 1;
+          setSelecting(false);
           setText(event.target.value);
           setItems([]);
           setOpen(false);

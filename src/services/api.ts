@@ -78,6 +78,7 @@ export interface Invoice { id: number; tripId: number; invoiceNo: string; status
 export interface BookingTransaction { id: number; eventType: string; status: string; amount: number; currency: string; description: string; actorUserId: number | null; actorName: string | null; actorEmail: string | null; referenceType: string | null; referenceId: string | null; metadata: Record<string, unknown>; createdAt: string }
 export interface FinanceTotals { charged: number; paid: number; outstanding: number; currency: string }
 export interface TripFinance { tripId: number; payment: Payment | null; payments: Payment[]; invoice: Invoice | null; transactions: BookingTransaction[]; totals: FinanceTotals }
+export type AdjustmentCategory = 'salik' | 'parking' | 'airport_fee' | 'waiting_time' | 'extra_stop' | 'gratuity' | 'damage_cleaning' | 'discount' | 'other';
 
 export interface BookingPayload {
   driver_id: number | null;
@@ -172,8 +173,8 @@ export function listPartners(activeOnly = true): Promise<Paginated<Partner>> { r
 export function createPartner(payload: Omit<Partner, 'id' | 'contactsCount'>): Promise<Partner> { return request('/dashboard/booking-partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function updatePartner(id: number, payload: Omit<Partner, 'id' | 'contactsCount'>): Promise<Partner> { return request(`/dashboard/booking-partners/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 
-export function listBookings(values: { page?: number; q?: string; status?: string; createdByMe?: boolean } = {}): Promise<Paginated<Booking>> {
-  return request(`/dashboard/bookings${query({ page: values.page || 1, page_size: 25, q: values.q, status: values.status, created_by_me: values.createdByMe })}`);
+export function listBookings(values: { page?: number; pageSize?: number; q?: string; status?: string; createdByMe?: boolean } = {}): Promise<Paginated<Booking>> {
+  return request(`/dashboard/bookings${query({ page: values.page || 1, page_size: values.pageSize || 100, q: values.q, status: values.status, created_by_me: values.createdByMe })}`);
 }
 export function createBooking(payload: BookingPayload): Promise<Booking> { return request('/dashboard/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function updateBooking(id: number | string, payload: Record<string, unknown>): Promise<Booking> { return request(`/dashboard/bookings/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
@@ -186,6 +187,7 @@ export function estimateRoute(payload: { pickup: Place; dropoff: Place; stops?: 
 export function finance(tripIds: Array<string | number>): Promise<TripFinance[]> { return request(`/booking-operations/finance${query({ trip_ids: tripIds.join(',') })}`); }
 export function createPaymentLink(tripId: number | string, amount?: number): Promise<Payment> { return request(`/booking-operations/bookings/${tripId}/payment-links`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amount || undefined, currency: 'AED', createInvoice: true }) }); }
 export function extendRental(tripId: number | string, payload: { additionalHours: number; amount: number; notes?: string; createPaymentLink: boolean }): Promise<{ rentalDurationHours: number; rentalEndAt: string; payment: Payment | null; finance: TripFinance }> { return request(`/booking-operations/bookings/${tripId}/rental-extensions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+export function addInvoiceAdjustment(tripId: number | string, payload: { category: AdjustmentCategory; amount: number; reason: string; createPaymentLink: boolean }): Promise<{ transaction: BookingTransaction; payment: Payment | null; finance: TripFinance }> { return request(`/booking-operations/bookings/${tripId}/adjustments`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function refreshPayment(paymentId: number): Promise<Payment> { return request(`/booking-operations/payments/${paymentId}/refresh`, { method: 'POST' }); }
 export async function downloadInvoice(invoiceId: number, filename: string): Promise<void> { const value = await blob(`/booking-operations/invoices/${invoiceId}/pdf`); const url = URL.createObjectURL(value); const a = document.createElement('a'); a.href = url; a.download = `${filename}.pdf`; a.click(); URL.revokeObjectURL(url); }
 export function shareInvoice(invoiceId: number): Promise<{ url: string }> { return request(`/booking-operations/invoices/${invoiceId}/share`, { method: 'POST' }); }

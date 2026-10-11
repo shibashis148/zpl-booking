@@ -8,16 +8,20 @@ export interface User {
 
 export interface Paginated<T> { items: T[]; total: number; page: number; page_size: number; total_pages: number }
 export interface Driver { id: number; first_name: string; last_name: string; phone_number: string; is_active: boolean; vehicle: Vehicle | null }
-export interface Vehicle { id: number; license_plate: string; vehicle_model: string; driver_id: number | null; is_active: boolean }
+export interface Vehicle { id: number; license_plate: string; vehicle_model: string; service_class: VehicleClass | null; driver_id: number | null; is_active: boolean }
 export interface Partner { id: number; name: string; partner_type: string; email: string | null; phone: string | null; address: string | null; representative: string | null; billing_email: string | null; tax_id: string | null; notes: string | null; is_active: boolean; contactsCount: number }
 export interface Place { address: string; label?: string; lat: number; lng: number }
 export interface PlaceSuggestion { placeId: string; description: string; mainText: string; secondaryText: string }
 export interface PlaceDetails { placeId: string; name: string; address: string; lat: number; lng: number }
+export type ServiceType = 'airport_pickup' | 'airport_dropoff' | 'point_to_point' | 'hourly' | 'full_day';
+export type VehicleClass = 'eco' | 'business' | 'first' | 'exotic' | 'suv' | 'van' | 'luxury_bus';
+export type ChildSeatType = 'front_facing' | 'rear_facing' | 'infant' | 'booster';
+export interface ChildSeat { type: ChildSeatType; quantity: number }
 
 export interface Booking {
   id: string;
   externalId?: string | null;
-  driverId: number;
+  driverId: number | null;
   driverName: string;
   vehiclePlate: string | null;
   vehicleModel: string | null;
@@ -31,12 +35,24 @@ export interface Booking {
   distanceKm: number;
   durationMin: number;
   bookingType: string | null;
+  serviceType: ServiceType;
+  assignmentStatus: 'unassigned' | 'assigned' | 'accepted' | 'rejected';
+  financialDisposition: 'standard' | 'cancelled_non_chargeable' | 'no_show_chargeable';
+  vehicleClass: VehicleClass | null;
   bookingLabel: string | null;
   bookingNotes: string | null;
   partnerId: number | null;
+  accountId: number | null;
   partnerName: string | null;
   scheduledAt: string | null;
+  rentalDurationHours: number | null;
+  rentalEndAt: string | null;
+  startedAt?: number | null;
+  endedAt?: number | null;
   guestCount: number | null;
+  luggageCount: number;
+  childSeats: ChildSeat[];
+  stops: Array<{ address: string; label?: string; lat?: number; lng?: number; location?: { lat: number; lng: number } }>;
   roomNo: string | null;
   flightNo: string | null;
 }
@@ -58,24 +74,33 @@ export interface Payment {
   expiresAt: string | null;
 }
 
-export interface Invoice { id: number; tripId: number; invoiceNo: string; status: string; amount: number; currency: string; issueDate: string | null; dueDate: string | null; paidAt: string | null }
-export interface TripFinance { tripId: number; payment: Payment | null; invoice: Invoice | null }
+export interface Invoice { id: number; tripId: number; invoiceNo: string; status: string; amount: number; paidAmount: number; amountDue: number; currency: string; issueDate: string | null; dueDate: string | null; paidAt: string | null; lineItems: Array<Record<string, unknown>> }
+export interface BookingTransaction { id: number; eventType: string; status: string; amount: number; currency: string; description: string; actorUserId: number | null; actorName: string | null; actorEmail: string | null; referenceType: string | null; referenceId: string | null; metadata: Record<string, unknown>; createdAt: string }
+export interface FinanceTotals { charged: number; paid: number; outstanding: number; currency: string }
+export interface TripFinance { tripId: number; payment: Payment | null; payments: Payment[]; invoice: Invoice | null; transactions: BookingTransaction[]; totals: FinanceTotals }
 
 export interface BookingPayload {
-  driver_id: number;
-  vehicle_id: number;
+  driver_id: number | null;
+  vehicle_id: number | null;
   partner_id?: number | null;
+  account_id?: number | null;
   booking_type: string;
+  service_type: ServiceType;
+  vehicle_class?: VehicleClass | null;
   customer_name: string;
   customer_phone: string;
   customer_email?: string | null;
   pickup: Place;
   dropoff: Place;
+  stops?: Place[];
   scheduled_at: string;
   guest_count?: number | null;
+  luggage_count?: number;
+  child_seats?: ChildSeat[];
   fare?: number | null;
   distance_km?: number | null;
   duration_min?: number | null;
+  rental_duration_hours?: number | null;
   notes?: string | null;
   notify_driver?: boolean;
 }
@@ -156,10 +181,11 @@ export function notifyDriver(id: number | string): Promise<{ sent: boolean; reas
 
 export function searchPlaces(text: string, sessionToken: string): Promise<PlaceSuggestion[]> { return request(`/dashboard/bookings/places${query({ q: text, session_token: sessionToken })}`); }
 export function placeDetails(placeId: string, sessionToken: string): Promise<PlaceDetails> { return request(`/dashboard/bookings/place-details${query({ place_id: placeId, session_token: sessionToken })}`); }
-export function estimateRoute(payload: { pickup: Place; dropoff: Place; vehicle_id: number; scheduled_at: string }): Promise<{ fare: number; distanceKm: number; durationMin: number }> { return request('/dashboard/bookings/fare-estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+export function estimateRoute(payload: { pickup: Place; dropoff: Place; stops?: Place[]; vehicle_id?: number | null; scheduled_at: string }): Promise<{ fare: number; distanceKm: number; durationMin: number }> { return request('/dashboard/bookings/fare-estimate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 
 export function finance(tripIds: Array<string | number>): Promise<TripFinance[]> { return request(`/booking-operations/finance${query({ trip_ids: tripIds.join(',') })}`); }
 export function createPaymentLink(tripId: number | string, amount?: number): Promise<Payment> { return request(`/booking-operations/bookings/${tripId}/payment-links`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ amount: amount || undefined, currency: 'AED', createInvoice: true }) }); }
+export function extendRental(tripId: number | string, payload: { additionalHours: number; amount: number; notes?: string; createPaymentLink: boolean }): Promise<{ rentalDurationHours: number; rentalEndAt: string; payment: Payment | null; finance: TripFinance }> { return request(`/booking-operations/bookings/${tripId}/rental-extensions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function refreshPayment(paymentId: number): Promise<Payment> { return request(`/booking-operations/payments/${paymentId}/refresh`, { method: 'POST' }); }
 export async function downloadInvoice(invoiceId: number, filename: string): Promise<void> { const value = await blob(`/booking-operations/invoices/${invoiceId}/pdf`); const url = URL.createObjectURL(value); const a = document.createElement('a'); a.href = url; a.download = `${filename}.pdf`; a.click(); URL.revokeObjectURL(url); }
 export function shareInvoice(invoiceId: number): Promise<{ url: string }> { return request(`/booking-operations/invoices/${invoiceId}/share`, { method: 'POST' }); }

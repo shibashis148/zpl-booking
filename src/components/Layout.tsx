@@ -6,7 +6,7 @@ import Brand from './Brand';
 const nav = [
   { to: '/new', label: 'New booking', icon: CalendarPlus },
   { to: '/bookings', label: 'Trips & payments', icon: CarProfile },
-  { to: '/partners', label: 'Partners', icon: Handshake },
+  { to: '/partners', label: 'Accounts', icon: Handshake },
 ];
 
 export default function Layout() {

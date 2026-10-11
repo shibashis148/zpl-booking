@@ -42,8 +42,8 @@ export default function PartnersPage() {
 
   return <div className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4">
-      <div><p className="text-xs font-bold uppercase tracking-[.18em] text-gold-dark">Relationships</p><h1 className="mt-1 font-display text-3xl font-extrabold">Partners</h1><p className="mt-2 text-sm text-slate-500">Hotels, corporate accounts and travel partners available during booking.</p></div>
-      <button onClick={() => setEditing('new')} className="btn-gold"><Plus weight="bold" /> Add partner</button>
+      <div><p className="text-xs font-bold uppercase tracking-[.18em] text-gold-dark">Client directory</p><h1 className="mt-1 font-display text-3xl font-extrabold">Accounts</h1><p className="mt-2 text-sm text-slate-500">Direct, hotel, corporate and travel accounts available during booking.</p></div>
+      <button onClick={() => setEditing('new')} className="btn-gold"><Plus weight="bold" /> Add account</button>
     </div>
     {message && <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700"><CheckCircle />{message}</div>}
     {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error}</div>}

@@ -89,7 +89,7 @@ export interface BookingPayload {
   service_type: ServiceType;
   vehicle_class?: VehicleClass | null;
   customer_name: string;
-  customer_phone: string;
+  customer_phone?: string;
   customer_email?: string | null;
   pickup: Place;
   dropoff: Place;

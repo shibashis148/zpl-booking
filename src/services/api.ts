@@ -74,6 +74,7 @@ export interface Booking {
   flightAirlineCode: string | null;
   flightNumber: string | null;
   flightTracking: FlightTracking | null;
+  cancelReason: string | null;
 }
 
 export interface Payment {

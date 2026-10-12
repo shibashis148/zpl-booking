@@ -17,6 +17,21 @@ export type ServiceType = 'airport_pickup' | 'airport_dropoff' | 'point_to_point
 export type VehicleClass = 'eco' | 'business' | 'first' | 'exotic' | 'suv' | 'van' | 'luxury_bus';
 export type ChildSeatType = 'front_facing' | 'rear_facing' | 'infant' | 'booster';
 export interface ChildSeat { type: ChildSeatType; quantity: number }
+export interface FlightTracking {
+  provider?: string | null;
+  flight_iata?: string | null;
+  status?: string | null;
+  airport_code?: string | null;
+  airport_name?: string | null;
+  airline_name?: string | null;
+  scheduled_at?: string | null;
+  estimated_at?: string | null;
+  actual_at?: string | null;
+  terminal?: string | null;
+  gate?: string | null;
+  delay_minutes?: number | null;
+  checked_at?: string | null;
+}
 
 export interface Booking {
   id: string;
@@ -55,6 +70,10 @@ export interface Booking {
   stops: Array<{ address: string; label?: string; lat?: number; lng?: number; location?: { lat: number; lng: number } }>;
   roomNo: string | null;
   flightNo: string | null;
+  airportCode: string | null;
+  flightAirlineCode: string | null;
+  flightNumber: string | null;
+  flightTracking: FlightTracking | null;
 }
 
 export interface Payment {
@@ -91,6 +110,10 @@ export interface BookingPayload {
   customer_name: string;
   customer_phone?: string;
   customer_email?: string | null;
+  airport_code?: string | null;
+  flight_airline_code?: string | null;
+  flight_number?: string | null;
+  flight_no?: string | null;
   pickup: Place;
   dropoff: Place;
   stops?: Place[];
@@ -179,6 +202,7 @@ export function listBookings(values: { page?: number; pageSize?: number; q?: str
 export function createBooking(payload: BookingPayload): Promise<Booking> { return request('/dashboard/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function updateBooking(id: number | string, payload: Record<string, unknown>): Promise<Booking> { return request(`/dashboard/bookings/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function notifyDriver(id: number | string): Promise<{ sent: boolean; reason: string | null }> { return request(`/dashboard/bookings/${id}/notify`, { method: 'POST' }); }
+export function refreshBookingFlight(id: number | string): Promise<Booking> { return request(`/dashboard/bookings/${id}/flight/refresh`, { method: 'POST' }); }
 
 export function searchPlaces(text: string, sessionToken: string): Promise<PlaceSuggestion[]> { return request(`/dashboard/bookings/places${query({ q: text, session_token: sessionToken })}`); }
 export function placeDetails(placeId: string, sessionToken: string): Promise<PlaceDetails> { return request(`/dashboard/bookings/place-details${query({ place_id: placeId, session_token: sessionToken })}`); }

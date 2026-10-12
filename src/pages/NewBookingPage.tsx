@@ -16,6 +16,15 @@ function dubaiInputValue(value: Date): string {
 
 function dubaiIso(value: string): string { return `${value}:00+04:00`; }
 
+const UAE_AIRPORTS = [
+  ['DXB', 'Dubai International Airport'],
+  ['DWC', 'Al Maktoum International Airport'],
+  ['AUH', 'Zayed International Airport'],
+  ['SHJ', 'Sharjah International Airport'],
+  ['RKT', 'Ras Al Khaimah International Airport'],
+  ['AAN', 'Al Ain International Airport'],
+] as const;
+
 type SubmissionResult = {
   status: 'creating_booking' | 'creating_payment' | 'success' | 'partial' | 'error';
   bookingId?: string;
@@ -47,6 +56,9 @@ export default function NewBookingPage() {
   const [partnerId, setPartnerId] = useState('');
   const [assignmentMode, setAssignmentMode] = useState<'unassigned' | 'assigned'>('unassigned');
   const [serviceType, setServiceType] = useState<ServiceType>('point_to_point');
+  const [airportCode, setAirportCode] = useState('DXB');
+  const [flightAirlineCode, setFlightAirlineCode] = useState('');
+  const [flightNumber, setFlightNumber] = useState('');
   const [vehicleClass, setVehicleClass] = useState<VehicleClass>('business');
   const [fare, setFare] = useState('');
   const [distance, setDistance] = useState('');
@@ -64,6 +76,7 @@ export default function NewBookingPage() {
 
   const selectedDriver = useMemo(() => drivers.find((row) => row.id === Number(driverId)), [driverId, drivers]);
   const isRental = serviceType === 'hourly' || serviceType === 'full_day';
+  const isAirport = serviceType === 'airport_pickup' || serviceType === 'airport_dropoff';
   const filteredVehicles = useMemo(() => vehicles.filter((row) => !row.service_class || row.service_class === vehicleClass), [vehicleClass, vehicles]);
   const chooseDriver = (value: string) => {
     setDriverId(value);
@@ -77,13 +90,14 @@ export default function NewBookingPage() {
     catch (value) { setError(value instanceof Error ? value.message : 'Could not estimate the route.'); }
     finally { setEstimating(false); }
   };
-  const reset = () => { setCustomerName(''); setCustomerPhone(''); setCustomerEmail(''); setPickup(null); setDropoff(null); setStops([]); setScheduledAt(defaultSchedule()); setGuests('1'); setLuggage('0'); setChildSeats([]); setPartnerId(''); setDriverId(''); setVehicleId(''); setAssignmentMode('unassigned'); setServiceType('point_to_point'); setVehicleClass('business'); setFare(''); setDistance(''); setDuration(''); setNotes(''); setRentalHours('3'); setResult(null); };
+  const reset = () => { setCustomerName(''); setCustomerPhone(''); setCustomerEmail(''); setPickup(null); setDropoff(null); setStops([]); setScheduledAt(defaultSchedule()); setGuests('1'); setLuggage('0'); setChildSeats([]); setPartnerId(''); setDriverId(''); setVehicleId(''); setAssignmentMode('unassigned'); setServiceType('point_to_point'); setAirportCode('DXB'); setFlightAirlineCode(''); setFlightNumber(''); setVehicleClass('business'); setFare(''); setDistance(''); setDuration(''); setNotes(''); setRentalHours('3'); setResult(null); };
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setError(''); setResult(null);
     if (!pickup || !dropoff) { setError('Select both pickup and drop-off from the address suggestions.'); return; }
     if (!partnerId) { setError('Select the account responsible for this booking. Use Z Plus - Direct Guest for direct customers.'); return; }
     if (stops.some((row) => !row)) { setError('Select every intermediate stop from the address suggestions, or remove the empty stop.'); return; }
     if (assignmentMode === 'assigned' && (!driverId || !vehicleId)) { setError('Select both driver and vehicle, or keep the booking unassigned.'); return; }
+    if (isAirport && (!airportCode || !flightAirlineCode.trim() || !flightNumber.trim())) { setError('Select the airport and enter both airline code and flight number.'); return; }
     const numericFare = Number(fare); const numericDistance = isRental ? 0 : Number(distance); const numericDuration = isRental ? Number(rentalHours) * 60 : Number(duration);
     if (!(numericFare > 0) || !(numericDistance >= 0) || !(numericDuration >= 0)) { setError(isRental ? 'Enter a valid rental price and duration.' : 'Estimate the route or enter a valid fare, distance and duration.'); return; }
     setSaving(true);
@@ -92,6 +106,7 @@ export default function NewBookingPage() {
       const booking = await createBooking({
         driver_id: assignmentMode === 'assigned' ? Number(driverId) : null, vehicle_id: assignmentMode === 'assigned' ? Number(vehicleId) : null, partner_id: Number(partnerId), account_id: Number(partnerId),
         booking_type: isRental ? 'rental' : serviceType.startsWith('airport_') ? 'airport_transfer' : 'normal', service_type: serviceType, vehicle_class: vehicleClass, customer_name: customerName.trim(), customer_phone: customerPhone.trim(), customer_email: customerEmail.trim() || null,
+        airport_code: isAirport ? airportCode : null, flight_airline_code: isAirport ? flightAirlineCode.trim().toUpperCase() : null, flight_number: isAirport ? flightNumber.trim().toUpperCase() : null,
         pickup, dropoff, stops: stops.filter((row): row is Place => Boolean(row)), scheduled_at: dubaiIso(scheduledAt), guest_count: Number(guests) || 1, luggage_count: Number(luggage) || 0, child_seats: childSeats,
         fare: numericFare, distance_km: numericDistance, duration_min: numericDuration, rental_duration_hours: isRental ? Number(rentalHours) : null, notes: notes.trim() || null, notify_driver: assignmentMode === 'assigned' && notify,
       });
@@ -124,6 +139,7 @@ export default function NewBookingPage() {
         </section>
         <section className="card p-5 lg:p-6"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-gold-soft p-2.5 text-gold-dark"><UserCircle size={22} /></div><div><h2 className="font-display font-bold">Guest & requirements</h2><p className="text-xs text-slate-500">Contact details and passenger needs.</p></div></div><div className="grid gap-4 md:grid-cols-3"><label><span className="label">Full name *</span><input required className="field" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Customer name" /></label><label><span className="label">Phone (optional)</span><input type="tel" className="field" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="+971…" /></label><label><span className="label">Email</span><input type="email" className="field" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="customer@email.com" /></label><label><span className="label">Guests *</span><input required type="number" min="1" max="99" className="field" value={guests} onChange={(e) => setGuests(e.target.value)} /></label><label><span className="label">Luggage</span><input type="number" min="0" max="99" className="field" value={luggage} onChange={(e) => setLuggage(e.target.value)} /></label></div><div className="mt-4"><div className="flex items-center justify-between"><span className="label">Child seats</span>{childSeats.length < 4 && <button type="button" onClick={() => setChildSeats((rows) => [...rows, { type: 'infant', quantity: 1 }])} className="text-xs font-bold text-gold-dark">+ Add child seat</button>}</div>{childSeats.map((seat, index) => <div key={index} className="mt-2 grid grid-cols-[1fr_90px_auto] gap-2"><select className="field" value={seat.type} onChange={(e) => setChildSeats((rows) => rows.map((row, i) => i === index ? { ...row, type: e.target.value as ChildSeatType } : row))}><option value="front_facing">Front facing child seat</option><option value="rear_facing">Rear facing child seat</option><option value="infant">Infant seat</option><option value="booster">Booster</option></select><input aria-label="Seat count" type="number" min="1" max="10" className="field" value={seat.quantity} onChange={(e) => setChildSeats((rows) => rows.map((row, i) => i === index ? { ...row, quantity: Number(e.target.value) || 1 } : row))} /><button type="button" onClick={() => setChildSeats((rows) => rows.filter((_, i) => i !== index))} className="rounded-xl px-3 text-xs font-bold text-red-600 hover:bg-red-50">Remove</button></div>)}</div></section>
         <section className="card p-5 lg:p-6"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-blue-50 p-2.5 text-blue-700"><MapPin size={22} /></div><div><h2 className="font-display font-bold">Journey</h2><p className="text-xs text-slate-500">Pickup, ordered intermediate stops and final drop-off.</p></div></div><div className="grid gap-4 md:grid-cols-2"><PlaceField label="Pickup" value={pickup} onChange={setPickup} /><PlaceField label={isRental ? 'Planned final drop-off' : 'Drop-off'} value={dropoff} onChange={setDropoff} /></div><div className="mt-4 space-y-3">{stops.map((stop, index) => <div key={index} className="grid grid-cols-[1fr_auto] items-end gap-2"><PlaceField label={`Stop ${index + 1}`} value={stop} onChange={(place) => setStops((rows) => rows.map((row, i) => i === index ? place : row))} /><button type="button" onClick={() => setStops((rows) => rows.filter((_, i) => i !== index))} className="btn-secondary mb-px h-[50px] px-3">Remove</button></div>)}{stops.length < 15 && <button type="button" onClick={() => setStops((rows) => [...rows, null])} className="btn-secondary">+ Add intermediate stop</button>}</div><div className="mt-4 grid gap-4 md:grid-cols-2"><label><span className="label">{isRental ? 'Service start *' : 'Pickup date & time *'}</span><input required type="datetime-local" className="field" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} /></label>{isRental && <label><span className="label">Duration *</span><select className="field" disabled={serviceType === 'full_day'} value={serviceType === 'full_day' ? '24' : rentalHours} onChange={(e) => { setRentalHours(e.target.value); setDuration(String(Number(e.target.value) * 60)); }}>{Array.from({ length: 43 }, (_, index) => 3 + index * .5).map((hours) => <option key={hours} value={hours}>{hours === 24 ? 'Full day (24 hours)' : `${hours} hours`}</option>)}</select></label>}</div>{isRental && scheduledAt && <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm text-violet-900"><strong>Planned window:</strong> {formatRentalWindow(scheduledAt, Number(serviceType === 'full_day' ? 24 : rentalHours))}</div>}</section>
+        {isAirport && <AirportDetailsFields airportCode={airportCode} onAirportCode={setAirportCode} airlineCode={flightAirlineCode} onAirlineCode={setFlightAirlineCode} flightNumber={flightNumber} onFlightNumber={setFlightNumber} />}
         <section className="card p-5 lg:p-6"><div className="mb-5 flex items-center gap-3"><div className="rounded-xl bg-violet-50 p-2.5 text-violet-700"><BellRinging size={22} /></div><div><h2 className="font-display font-bold">Dispatch assignment</h2><p className="text-xs text-slate-500">Keep confirmed work in dispatch, or release it to a driver now.</p></div></div><div className="grid gap-4 md:grid-cols-2"><label><span className="label">Assignment status</span><select className="field" value={assignmentMode} onChange={(e) => { const mode = e.target.value as 'unassigned' | 'assigned'; setAssignmentMode(mode); if (mode === 'unassigned') { setDriverId(''); setVehicleId(''); setNotify(false); } }}><option value="unassigned">Unassigned — dispatch only</option><option value="assigned">Assigned — visible to driver</option></select></label><label><span className="label">Requested vehicle class *</span><select className="field" value={vehicleClass} onChange={(e) => { setVehicleClass(e.target.value as VehicleClass); setVehicleId(''); }}><option value="eco">Eco Class</option><option value="business">Business Class</option><option value="first">First Class</option><option value="exotic">Exotic Class</option><option value="suv">SUV</option><option value="van">Van</option><option value="luxury_bus">Luxury Bus</option></select></label>{assignmentMode === 'assigned' && <><label><span className="label">Driver *</span><select required className="field" value={driverId} onChange={(e) => chooseDriver(e.target.value)}><option value="">Select driver</option>{drivers.map((row) => <option key={row.id} value={row.id}>{row.first_name} {row.last_name}{row.vehicle ? ` · ${row.vehicle.license_plate}` : ''}</option>)}</select></label><label><span className="label">Vehicle *</span><select required className="field" value={vehicleId} onChange={(e) => setVehicleId(e.target.value)}><option value="">Select matching vehicle</option>{filteredVehicles.map((row) => <option key={row.id} value={row.id}>{row.license_plate} · {row.vehicle_model}{row.service_class ? ` · ${row.service_class.replaceAll('_', ' ')}` : ''}</option>)}</select></label></>}</div>{selectedDriver && !selectedDriver.vehicle && <p className="mt-3 text-xs font-semibold text-amber-700">This driver has no current vehicle assignment. Select the booking vehicle manually.</p>}<label className="mt-4 block"><span className="label">Booking notes</span><textarea className="field min-h-24 resize-y" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Flight, room, signboard or special instructions" /></label></section>
       </div>
       <aside className="space-y-6">
@@ -132,6 +148,20 @@ export default function NewBookingPage() {
     </form>
     {result && <BookingResultModal result={result} driverName={selectedDriver ? `${selectedDriver.first_name} ${selectedDriver.last_name}`.trim() : ''} vehicle={vehicles.find((row) => row.id === Number(vehicleId)) || null} notify={assignmentMode === 'assigned' && notify} bookingMode={isRental ? 'rental' : 'normal'} rentalHours={Number(serviceType === 'full_day' ? 24 : rentalHours)} assignmentMode={assignmentMode} onClose={() => setResult(null)} onReset={reset} />}
   </div>;
+}
+
+function AirportDetailsFields({ airportCode, onAirportCode, airlineCode, onAirlineCode, flightNumber, onFlightNumber }: { airportCode: string; onAirportCode: (value: string) => void; airlineCode: string; onAirlineCode: (value: string) => void; flightNumber: string; onFlightNumber: (value: string) => void }) {
+  return <section className="card border-blue-100 bg-blue-50/30 p-5 lg:p-6">
+    <p className="text-xs font-bold uppercase tracking-wider text-blue-700">Airport & flight tracking</p>
+    <h2 className="mt-1 font-display text-xl font-bold">Flight details</h2>
+    <p className="mt-1 text-xs text-slate-500">Dispatch will track this flight and notify the assigned driver when its status, time, terminal or gate changes.</p>
+    <div className="mt-5 grid gap-4 md:grid-cols-3">
+      <label><span className="label">Airport *</span><select required className="field" value={airportCode} onChange={(event) => onAirportCode(event.target.value)}>{UAE_AIRPORTS.map(([code, name]) => <option key={code} value={code}>{code} · {name}</option>)}</select></label>
+      <label><span className="label">Airline code *</span><input required maxLength={4} className="field uppercase" value={airlineCode} onChange={(event) => onAirlineCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="EK" /></label>
+      <label><span className="label">Flight number *</span><input required maxLength={8} className="field uppercase" value={flightNumber} onChange={(event) => onFlightNumber(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="202" /></label>
+    </div>
+    {(airlineCode || flightNumber) && <p className="mt-3 text-xs font-semibold text-blue-800">Tracking reference: {(airlineCode + flightNumber).toUpperCase()}</p>}
+  </section>;
 }
 
 function BookingResultModal({ result, driverName, vehicle, notify, bookingMode, rentalHours, assignmentMode, onClose, onReset }: { result: SubmissionResult; driverName: string; vehicle: Vehicle | null; notify: boolean; bookingMode: 'normal' | 'rental'; rentalHours: number; assignmentMode: 'unassigned' | 'assigned'; onClose: () => void; onReset: () => void }) {

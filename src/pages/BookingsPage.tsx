@@ -1,8 +1,9 @@
-import { ArrowClockwise, BellRinging, CheckCircle, ClipboardText, ClockCountdown, DownloadSimple, FileArrowUp, LinkSimple, ListBullets, MagnifyingGlass, PencilSimple, Play, Plus, Spinner, Stop, X } from '@phosphor-icons/react';
+import { AirplaneTilt, ArrowClockwise, BellRinging, Calculator, CheckCircle, ClipboardText, ClockCountdown, DownloadSimple, FileArrowUp, LinkSimple, ListBullets, MagnifyingGlass, MapPin, PencilSimple, Play, Plus, Spinner, Stop, X } from '@phosphor-icons/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { BookingBoard, BookingCalendar, BookingStatusOverview, BookingViewTabs, type BookingView } from '../components/bookings/BookingViews';
-import { addInvoiceAdjustment, createPaymentLink, downloadInvoice, extendRental, finance, listBookings, listDrivers, listPartners, listVehicles, notifyDriver, refreshPayment, shareInvoice, updateBooking, type AdjustmentCategory, type Booking, type Driver, type Partner, type TripFinance, type Vehicle } from '../services/api';
+import PlaceField from '../components/PlaceField';
+import { addInvoiceAdjustment, createPaymentLink, downloadInvoice, estimateRoute, extendRental, finance, listBookings, listDrivers, listPartners, listVehicles, notifyDriver, refreshBookingFlight, refreshPayment, shareInvoice, updateBooking, type AdjustmentCategory, type Booking, type ChildSeat, type ChildSeatType, type Driver, type Partner, type Place, type ServiceType, type TripFinance, type Vehicle, type VehicleClass } from '../services/api';
 
 const statusStyle: Record<string, string> = {
   scheduled: 'bg-blue-50 text-blue-700', in_progress: 'bg-violet-50 text-violet-700', completed: 'bg-emerald-50 text-emerald-700',
@@ -11,6 +12,11 @@ const statusStyle: Record<string, string> = {
   superseded: 'bg-slate-100 text-slate-500',
   partially_paid: 'bg-amber-50 text-amber-700', issued: 'bg-blue-50 text-blue-700',
 };
+const UAE_AIRPORTS = [
+  ['DXB', 'Dubai International Airport'], ['DWC', 'Al Maktoum International Airport'],
+  ['AUH', 'Zayed International Airport'], ['SHJ', 'Sharjah International Airport'],
+  ['RKT', 'Ras Al Khaimah International Airport'], ['AAN', 'Al Ain International Airport'],
+] as const;
 const formatDate = (value?: string | number | null) => value
   ? new Date(value).toLocaleString('en-AE', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Dubai' })
   : 'Not scheduled';
@@ -140,7 +146,7 @@ function BookingRow({ row, entry, busyAction, onAction, onPayment, onCopy, onSha
   const isRental = row.bookingType === 'rental';
   const outstanding = entry?.totals.outstanding || 0;
   return <tr className="align-top hover:bg-slate-50/60">
-    <td className="whitespace-nowrap px-4 py-4"><div className="flex items-center gap-2"><strong>#{row.id}</strong>{isRental && <span className="pill bg-violet-50 text-violet-700"><ClockCountdown /> Rental</span>}</div><span className={`pill mt-2 ${statusStyle[row.status] || 'bg-slate-100 text-slate-600'}`}>{row.financialDisposition === 'no_show_chargeable' ? 'no show' : row.financialDisposition === 'cancelled_non_chargeable' ? 'cancelled · no charge' : row.status.replaceAll('_', ' ')}</span><span className="mt-1 block text-xs font-semibold text-slate-600">{row.serviceType.replaceAll('_', ' ')}</span><span className="mt-2 block text-xs text-slate-500">Start · {formatDate(row.scheduledAt)}</span>{isRental && <><span className="mt-1 block text-xs font-semibold text-violet-700">{row.rentalDurationHours} hours</span><span className="block text-xs text-slate-500">End · {formatDate(row.rentalEndAt)}</span></>}</td>
+    <td className="whitespace-nowrap px-4 py-4"><div className="flex items-center gap-2"><strong>#{row.id}</strong>{isRental && <span className="pill bg-violet-50 text-violet-700"><ClockCountdown /> Rental</span>}</div><span className={`pill mt-2 ${statusStyle[row.status] || 'bg-slate-100 text-slate-600'}`}>{row.financialDisposition === 'no_show_chargeable' ? 'no show' : row.financialDisposition === 'cancelled_non_chargeable' ? 'cancelled · no charge' : row.status.replaceAll('_', ' ')}</span><span className="mt-1 block text-xs font-semibold text-slate-600">{row.serviceType.replaceAll('_', ' ')}</span>{row.flightNo && <span className="mt-1 flex items-center gap-1 text-xs font-bold text-blue-700"><AirplaneTilt /> {row.airportCode || 'Airport'} · {row.flightNo} · {row.flightTracking?.status?.replaceAll('_', ' ') || 'tracking pending'}</span>}<span className="mt-2 block text-xs text-slate-500">Start · {formatDate(row.scheduledAt)}</span>{isRental && <><span className="mt-1 block text-xs font-semibold text-violet-700">{row.rentalDurationHours} hours</span><span className="block text-xs text-slate-500">End · {formatDate(row.rentalEndAt)}</span></>}</td>
     <td className="max-w-sm px-4 py-4"><strong>{row.customerName}</strong><span className="block text-xs text-slate-500">{row.customerPhone || 'No phone provided'}</span><p className="mt-2 truncate text-xs text-slate-700">{row.pickup.address}</p><p className="truncate text-xs text-slate-400">→ {row.drop.address}</p><p className="mt-2 font-bold">AED {row.fare.toLocaleString('en-AE')}</p></td>
     <td className="px-4 py-4"><strong className="block">{row.driverName || 'Unassigned'}</strong><span className="text-xs text-slate-500">{row.vehiclePlate || 'No vehicle'} · {row.vehicleModel || row.vehicleClass?.replaceAll('_', ' ') || ''}</span><span className="mt-1 block text-xs font-semibold text-slate-500">{row.assignmentStatus.replaceAll('_', ' ')}</span><span className="mt-2 block text-xs text-slate-500">{row.partnerName || 'Direct booking'}</span>{row.assignmentStatus !== 'unassigned' && <button disabled={busy('notify')} onClick={() => void onAction(`${row.id}:notify`, async () => { const result = await notifyDriver(row.id); if (!result.sent) throw new Error(result.reason || 'Notification was not sent.'); })} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-blue-700 disabled:opacity-50">{busy('notify') ? <Spinner className="animate-spin" /> : <BellRinging />} {busy('notify') ? 'Sending…' : 'Notify driver'}</button>}</td>
     <td className="px-4 py-4">{entry ? <><div className="flex items-center gap-2"><span className={`pill ${entry.totals.outstanding <= 0 && entry.totals.charged > 0 ? statusStyle.paid : entry.payment ? statusStyle[entry.payment.status] || statusStyle.pending : 'bg-slate-100 text-slate-600'}`}>{entry.totals.outstanding <= 0 && entry.totals.charged > 0 ? 'paid' : entry.payment?.status.replaceAll('_', ' ') || 'not sent'}</span></div><span className="mt-2 block text-xs text-slate-500">Paid AED {entry.totals.paid.toLocaleString('en-AE')}</span><strong className={`block text-xs ${outstanding > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>Due AED {outstanding.toLocaleString('en-AE')}</strong>{entry.payment && <div className="mt-2 flex flex-wrap gap-3"><button onClick={() => void onCopy(entry.payment!.paymentLink, 'Payment link')} className="inline-flex items-center gap-1 text-xs font-bold text-gold-dark"><ClipboardText /> Copy</button><button disabled={busy('refresh')} onClick={() => void onAction(`${row.id}:refresh`, async () => { await refreshPayment(entry.payment!.id); })} className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 disabled:opacity-50">{busy('refresh') ? <Spinner className="animate-spin" /> : <ArrowClockwise />} {busy('refresh') ? 'Refreshing…' : 'Refresh'}</button></div>}{outstanding > 0 && !entry.payment && <button disabled={busy('payment')} onClick={() => void onPayment(row)} className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-gold-dark disabled:opacity-50">{busy('payment') ? <Spinner className="animate-spin" /> : <LinkSimple />} {busy('payment') ? 'Creating…' : 'Create link'}</button>}</> : <span className="text-xs text-slate-400">Loading money…</span>}</td>
@@ -151,32 +157,155 @@ function BookingRow({ row, entry, busyAction, onAction, onPayment, onCopy, onSha
 
 function EditBooking({ booking, drivers, vehicles, partners, onClose, onSaved }: { booking: Booking; drivers: Driver[]; vehicles: Vehicle[]; partners: Partner[]; onClose: () => void; onSaved: () => Promise<void> }) {
   const matchingVehicle = vehicles.find((row) => row.license_plate === booking.vehiclePlate);
+  const asPlace = (value: Booking['pickup'] | Booking['drop']): Place => ({ address: value.address, label: value.label, lat: value.location.lat, lng: value.location.lng });
+  const asStop = (value: Booking['stops'][number]): Place => ({ address: value.address, label: value.label, lat: Number(value.lat ?? value.location?.lat), lng: Number(value.lng ?? value.location?.lng) });
   const [assignmentMode, setAssignmentMode] = useState<'unassigned' | 'assigned'>(booking.assignmentStatus === 'unassigned' ? 'unassigned' : 'assigned');
   const [driverId, setDriverId] = useState(booking.driverId ? String(booking.driverId) : '');
   const [vehicleId, setVehicleId] = useState(matchingVehicle ? String(matchingVehicle.id) : '');
   const [partnerId, setPartnerId] = useState(booking.partnerId ? String(booking.partnerId) : '');
   const [status, setStatus] = useState(booking.status);
   const [disposition, setDisposition] = useState<'active' | 'cancelled_non_chargeable' | 'no_show_chargeable'>(booking.financialDisposition === 'standard' ? 'active' : booking.financialDisposition);
+  const [serviceType, setServiceType] = useState<ServiceType>(booking.serviceType);
+  const [vehicleClass, setVehicleClass] = useState<VehicleClass>(booking.vehicleClass || 'business');
   const [name, setName] = useState(booking.customerName);
   const [phone, setPhone] = useState(booking.customerPhone);
   const [email, setEmail] = useState(booking.customerEmail || '');
+  const [guests, setGuests] = useState(String(booking.guestCount || 1));
+  const [luggage, setLuggage] = useState(String(booking.luggageCount || 0));
+  const [childSeats, setChildSeats] = useState<ChildSeat[]>(booking.childSeats || []);
+  const [roomNo, setRoomNo] = useState(booking.roomNo || '');
+  const [pickup, setPickup] = useState<Place | null>(asPlace(booking.pickup));
+  const [dropoff, setDropoff] = useState<Place | null>(asPlace(booking.drop));
+  const [stops, setStops] = useState<Array<Place | null>>(booking.stops.map(asStop));
   const [schedule, setSchedule] = useState(booking.scheduledAt ? dubaiInputValue(new Date(booking.scheduledAt)) : '');
   const [fare, setFare] = useState(String(booking.fare));
+  const [distance, setDistance] = useState(String(booking.distanceKm));
+  const [duration, setDuration] = useState(String(booking.durationMin));
   const [notes, setNotes] = useState(booking.bookingNotes || '');
+  const [airportCode, setAirportCode] = useState(booking.airportCode || 'DXB');
+  const [airlineCode, setAirlineCode] = useState(booking.flightAirlineCode || booking.flightNo?.match(/^[A-Z]{2,3}/)?.[0] || '');
+  const [flightNumber, setFlightNumber] = useState(booking.flightNumber || booking.flightNo?.replace(/^[A-Z]{2,3}/, '') || '');
+  const [flightInfo, setFlightInfo] = useState(booking.flightTracking);
   const [saving, setSaving] = useState(false);
+  const [estimating, setEstimating] = useState(false);
+  const [refreshingFlight, setRefreshingFlight] = useState(false);
   const [error, setError] = useState('');
+  const isAirport = serviceType === 'airport_pickup' || serviceType === 'airport_dropoff';
+  const filteredVehicles = vehicles.filter((row) => !row.service_class || row.service_class === vehicleClass || row.id === Number(vehicleId));
+
+  const estimate = async () => {
+    if (!pickup || !dropoff || !schedule) { setError('Select pickup, drop-off and pickup time first.'); return; }
+    setEstimating(true); setError('');
+    try {
+      const value = await estimateRoute({ pickup, dropoff, stops: stops.filter((row): row is Place => Boolean(row)), vehicle_id: vehicleId ? Number(vehicleId) : null, scheduled_at: `${schedule}:00+04:00` });
+      setFare(String(value.fare)); setDistance(String(value.distanceKm)); setDuration(String(value.durationMin));
+    } catch (value) { setError(value instanceof Error ? value.message : 'Could not estimate the edited route.'); }
+    finally { setEstimating(false); }
+  };
+
+  const refreshFlight = async () => {
+    setRefreshingFlight(true); setError('');
+    try {
+      const value = await refreshBookingFlight(booking.id);
+      setFlightInfo(value.flightTracking);
+    } catch (value) { setError(value instanceof Error ? value.message : 'Could not refresh flight status.'); }
+    finally { setRefreshingFlight(false); }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault(); setSaving(true); setError('');
     try {
+      if (!pickup || !dropoff) throw new Error('Select both pickup and drop-off from the address suggestions.');
+      if (stops.some((row) => !row)) throw new Error('Select every stop from the address suggestions, or remove the empty stop.');
       if (assignmentMode === 'assigned' && (!driverId || !vehicleId)) throw new Error('Select both driver and vehicle, or keep this booking unassigned.');
-      await updateBooking(booking.id, { driver_id: assignmentMode === 'assigned' ? Number(driverId) : null, vehicle_id: assignmentMode === 'assigned' ? Number(vehicleId) : null, partner_id: partnerId ? Number(partnerId) : null, status, disposition, customer_name: name.trim(), customer_phone: phone.trim(), customer_email: email.trim(), scheduled_at: `${schedule}:00+04:00`, fare: Number(fare), notes: notes.trim() });
+      if (isAirport && (!airportCode || !airlineCode.trim() || !flightNumber.trim())) throw new Error('Select the airport and enter both airline code and flight number.');
+      await updateBooking(booking.id, {
+        driver_id: assignmentMode === 'assigned' ? Number(driverId) : null,
+        vehicle_id: assignmentMode === 'assigned' ? Number(vehicleId) : null,
+        partner_id: partnerId ? Number(partnerId) : null,
+        status, disposition, service_type: serviceType, vehicle_class: vehicleClass,
+        customer_name: name.trim(), customer_phone: phone.trim(), customer_email: email.trim(),
+        guest_count: Number(guests) || 1, luggage_count: Number(luggage) || 0, child_seats: childSeats,
+        room_no: roomNo.trim(), pickup, dropoff, stops: stops.filter((row): row is Place => Boolean(row)),
+        scheduled_at: `${schedule}:00+04:00`, fare: Number(fare), distance_km: Number(distance), duration_min: Number(duration),
+        airport_code: isAirport ? airportCode : '', flight_airline_code: isAirport ? airlineCode.trim().toUpperCase() : '',
+        flight_number: isAirport ? flightNumber.trim().toUpperCase() : '', flight_no: isAirport ? `${airlineCode.trim()}${flightNumber.trim()}`.toUpperCase() : '',
+        notes: notes.trim(),
+      });
       await onSaved();
     } catch (value) { setError(value instanceof Error ? value.message : 'Could not update booking.'); }
     finally { setSaving(false); }
   };
-  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-sm"><form onSubmit={submit} className="h-full w-full max-w-xl overflow-y-auto bg-white p-6 shadow-2xl"><div className="flex items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-wider text-gold-dark">Booking #{booking.id}</p><h2 className="font-display text-2xl font-extrabold">Modify booking</h2></div><button type="button" onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100"><X size={22} /></button></div>{error && <div className="mt-5 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}<div className="mt-6 grid gap-4 md:grid-cols-2"><label><span className="label">Customer name</span><input required className="field" value={name} onChange={(event) => setName(event.target.value)} /></label><label><span className="label">Phone (optional)</span><input type="tel" className="field" value={phone} onChange={(event) => setPhone(event.target.value)} /></label><label className="md:col-span-2"><span className="label">Email</span><input type="email" className="field" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label><span className="label">Assignment</span><select className="field" value={assignmentMode} onChange={(event) => { const mode = event.target.value as 'unassigned' | 'assigned'; setAssignmentMode(mode); if (mode === 'unassigned') { setDriverId(''); setVehicleId(''); } }}><option value="unassigned">Unassigned</option><option value="assigned">Assigned</option></select></label><label><span className="label">Account</span><select className="field" value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Direct / no account</option>{partners.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>{assignmentMode === 'assigned' && <><label><span className="label">Driver *</span><select required className="field" value={driverId} onChange={(event) => setDriverId(event.target.value)}><option value="">Select driver</option>{drivers.map((row) => <option key={row.id} value={row.id}>{row.first_name} {row.last_name}</option>)}</select></label><label><span className="label">Vehicle *</span><select required className="field" value={vehicleId} onChange={(event) => setVehicleId(event.target.value)}><option value="">Select vehicle</option>{vehicles.map((row) => <option key={row.id} value={row.id}>{row.license_plate} · {row.vehicle_model}</option>)}</select></label></>}<label><span className="label">Trip status</span><select className="field" value={status} onChange={(event) => setStatus(event.target.value as Booking['status'])}><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label><label><span className="label">Cancellation / finance</span><select className="field" value={disposition} onChange={(event) => setDisposition(event.target.value as typeof disposition)}><option value="active">Active / standard</option><option value="cancelled_non_chargeable">Cancelled — non chargeable</option><option value="no_show_chargeable">No show — chargeable</option></select></label><label><span className="label">Pickup time</span><input required type="datetime-local" className="field" value={schedule} onChange={(event) => setSchedule(event.target.value)} /></label><label><span className="label">Fare (AED)</span><input required type="number" min="0" step="0.01" className="field" value={fare} onChange={(event) => setFare(event.target.value)} /></label><label className="md:col-span-2"><span className="label">Notes</span><textarea className="field min-h-28" value={notes} onChange={(event) => setNotes(event.target.value)} /></label></div><div className="mt-7 flex justify-end gap-3"><button type="button" onClick={onClose} className="btn-secondary">Cancel</button><button disabled={saving} className="btn-primary">{saving && <Spinner className="animate-spin" />} Save changes</button></div></form></div>;
-}
 
+  return <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-sm">
+    <form onSubmit={submit} className="h-full w-full max-w-5xl overflow-y-auto bg-slate-50 p-5 shadow-2xl sm:p-7">
+      <div className="sticky top-0 z-20 -mx-5 -mt-5 mb-6 flex items-center justify-between border-b border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:-mx-7 sm:-mt-7 sm:px-7">
+        <div><p className="text-xs font-bold uppercase tracking-wider text-gold-dark">Booking #{booking.id}</p><h2 className="font-display text-2xl font-extrabold">Modify complete booking</h2></div>
+        <button type="button" onClick={onClose} className="rounded-xl p-2 hover:bg-slate-100"><X size={22} /></button>
+      </div>
+      {error && <div className="mb-5 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</div>}
+
+      <div className="grid gap-5">
+        <section className="card p-5">
+          <h3 className="font-display text-lg font-bold">Service & guest</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <label><span className="label">Service type</span><select className="field" value={serviceType} onChange={(event) => setServiceType(event.target.value as ServiceType)}><option value="airport_pickup">Airport pickup</option><option value="airport_dropoff">Airport drop off</option><option value="point_to_point">Point to point</option><option value="hourly">Hourly</option><option value="full_day">Full day</option></select></label>
+            <label><span className="label">Account</span><select className="field" value={partnerId} onChange={(event) => setPartnerId(event.target.value)}><option value="">Direct / no account</option>{partners.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
+            <label><span className="label">Vehicle class</span><select className="field" value={vehicleClass} onChange={(event) => setVehicleClass(event.target.value as VehicleClass)}><option value="eco">Eco Class</option><option value="business">Business Class</option><option value="first">First Class</option><option value="exotic">Exotic Class</option><option value="suv">SUV</option><option value="van">Van</option><option value="luxury_bus">Luxury Bus</option></select></label>
+            <label><span className="label">Customer name</span><input required className="field" value={name} onChange={(event) => setName(event.target.value)} /></label>
+            <label><span className="label">Phone (optional)</span><input type="tel" className="field" value={phone} onChange={(event) => setPhone(event.target.value)} /></label>
+            <label><span className="label">Email</span><input type="email" className="field" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+            <label><span className="label">Guests</span><input required type="number" min="1" max="99" className="field" value={guests} onChange={(event) => setGuests(event.target.value)} /></label>
+            <label><span className="label">Luggage</span><input type="number" min="0" max="99" className="field" value={luggage} onChange={(event) => setLuggage(event.target.value)} /></label>
+            <label><span className="label">Room / reference</span><input className="field" value={roomNo} onChange={(event) => setRoomNo(event.target.value)} /></label>
+          </div>
+          <div className="mt-4"><div className="flex items-center justify-between"><span className="label">Child seats</span>{childSeats.length < 4 && <button type="button" onClick={() => setChildSeats((rows) => [...rows, { type: 'infant', quantity: 1 }])} className="text-xs font-bold text-gold-dark">+ Add child seat</button>}</div>{childSeats.map((seat, index) => <div key={index} className="mt-2 grid grid-cols-[1fr_90px_auto] gap-2"><select className="field" value={seat.type} onChange={(event) => setChildSeats((rows) => rows.map((row, i) => i === index ? { ...row, type: event.target.value as ChildSeatType } : row))}><option value="front_facing">Front facing</option><option value="rear_facing">Rear facing</option><option value="infant">Infant seat</option><option value="booster">Booster</option></select><input aria-label="Seat count" type="number" min="1" max="10" className="field" value={seat.quantity} onChange={(event) => setChildSeats((rows) => rows.map((row, i) => i === index ? { ...row, quantity: Number(event.target.value) || 1 } : row))} /><button type="button" onClick={() => setChildSeats((rows) => rows.filter((_, i) => i !== index))} className="rounded-xl px-3 text-xs font-bold text-red-600 hover:bg-red-50">Remove</button></div>)}</div>
+        </section>
+
+        <section className="card p-5">
+          <div className="flex items-center gap-2"><MapPin className="text-blue-700" /><h3 className="font-display text-lg font-bold">Journey</h3></div>
+          <div className="mt-4 grid gap-4 md:grid-cols-2"><PlaceField label="Pickup" value={pickup} onChange={setPickup} /><PlaceField label="Drop-off" value={dropoff} onChange={setDropoff} /></div>
+          <div className="mt-4 space-y-3">{stops.map((stop, index) => <div key={index} className="grid grid-cols-[1fr_auto] items-end gap-2"><PlaceField label={`Stop ${index + 1}`} value={stop} onChange={(place) => setStops((rows) => rows.map((row, i) => i === index ? place : row))} /><button type="button" onClick={() => setStops((rows) => rows.filter((_, i) => i !== index))} className="btn-secondary mb-px h-[50px] px-3">Remove</button></div>)}</div>
+          <button type="button" onClick={() => setStops((rows) => [...rows, null])} disabled={stops.length >= 15} className="btn-secondary mt-4"><Plus /> Add intermediate stop</button>
+          <div className="mt-4 grid gap-4 md:grid-cols-4">
+            <label><span className="label">Pickup time</span><input required type="datetime-local" className="field" value={schedule} onChange={(event) => setSchedule(event.target.value)} /></label>
+            <label><span className="label">Fare (AED)</span><input required type="number" min="0" step="0.01" className="field" value={fare} onChange={(event) => setFare(event.target.value)} /></label>
+            <label><span className="label">Distance km</span><input required type="number" min="0" step="0.1" className="field" value={distance} onChange={(event) => setDistance(event.target.value)} /></label>
+            <label><span className="label">Duration min</span><input required type="number" min="0" className="field" value={duration} onChange={(event) => setDuration(event.target.value)} /></label>
+          </div>
+          <button type="button" disabled={estimating} onClick={() => void estimate()} className="btn-secondary mt-4">{estimating ? <Spinner className="animate-spin" /> : <Calculator />} Recalculate edited route</button>
+        </section>
+
+        {isAirport && <section className="card border-blue-100 bg-blue-50/30 p-5">
+          <div className="flex items-center gap-2"><AirplaneTilt className="text-blue-700" /><h3 className="font-display text-lg font-bold">Airport & flight tracking</h3></div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <label><span className="label">Airport</span><select required className="field" value={airportCode} onChange={(event) => setAirportCode(event.target.value)}>{UAE_AIRPORTS.map(([code, label]) => <option key={code} value={code}>{code} · {label}</option>)}</select></label>
+            <label><span className="label">Airline code</span><input required maxLength={4} className="field uppercase" value={airlineCode} onChange={(event) => setAirlineCode(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="EK" /></label>
+            <label><span className="label">Flight number</span><input required maxLength={8} className="field uppercase" value={flightNumber} onChange={(event) => setFlightNumber(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} placeholder="202" /></label>
+          </div>
+          <div className="mt-4 rounded-xl border border-blue-100 bg-white p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-xs font-bold uppercase tracking-wider text-slate-400">Live status</span><strong className="mt-1 block">{flightInfo?.status?.replaceAll('_', ' ') || 'Waiting for first provider update'}</strong></div><button type="button" disabled={refreshingFlight} onClick={() => void refreshFlight()} className="btn-secondary px-3 py-2">{refreshingFlight ? <Spinner className="animate-spin" /> : <ArrowClockwise />} Refresh flight</button></div>
+            {flightInfo && <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-4"><span>ETA: <strong>{formatDate(flightInfo.estimated_at || flightInfo.scheduled_at)}</strong></span><span>Terminal: <strong>{flightInfo.terminal || '—'}</strong></span><span>Gate: <strong>{flightInfo.gate || '—'}</strong></span><span>Delay: <strong>{flightInfo.delay_minutes ? `${flightInfo.delay_minutes} min` : 'On time / unknown'}</strong></span></div>}
+          </div>
+          <p className="mt-3 text-xs text-blue-700">Material flight changes are stored in the booking ledger and pushed to the assigned driver.</p>
+        </section>}
+
+        <section className="card p-5">
+          <h3 className="font-display text-lg font-bold">Dispatch & status</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <label><span className="label">Assignment</span><select className="field" value={assignmentMode} onChange={(event) => { const mode = event.target.value as 'unassigned' | 'assigned'; setAssignmentMode(mode); if (mode === 'unassigned') { setDriverId(''); setVehicleId(''); } }}><option value="unassigned">Unassigned</option><option value="assigned">Assigned</option></select></label>
+            {assignmentMode === 'assigned' && <><label><span className="label">Driver</span><select required className="field" value={driverId} onChange={(event) => setDriverId(event.target.value)}><option value="">Select driver</option>{drivers.map((row) => <option key={row.id} value={row.id}>{row.first_name} {row.last_name}</option>)}</select></label><label><span className="label">Vehicle</span><select required className="field" value={vehicleId} onChange={(event) => setVehicleId(event.target.value)}><option value="">Select matching vehicle</option>{filteredVehicles.map((row) => <option key={row.id} value={row.id}>{row.license_plate} · {row.vehicle_model}</option>)}</select></label></>}
+            <label><span className="label">Trip status</span><select className="field" value={status} onChange={(event) => setStatus(event.target.value as Booking['status'])}><option value="scheduled">Scheduled</option><option value="in_progress">In progress</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+            <label><span className="label">Cancellation / finance</span><select className="field" value={disposition} onChange={(event) => setDisposition(event.target.value as typeof disposition)}><option value="active">Active / standard</option><option value="cancelled_non_chargeable">Cancelled — non chargeable</option><option value="no_show_chargeable">No show — chargeable</option></select></label>
+          </div>
+          <label className="mt-4 block"><span className="label">Notes</span><textarea className="field min-h-28" value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
+        </section>
+      </div>
+
+      <div className="sticky bottom-0 -mx-5 -mb-5 mt-6 flex justify-end gap-3 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:-mx-7 sm:-mb-7 sm:px-7"><button type="button" onClick={onClose} className="btn-secondary">Cancel</button><button disabled={saving || estimating} className="btn-primary">{saving && <Spinner className="animate-spin" />} {saving ? 'Saving…' : 'Save all changes'}</button></div>
+    </form>
+  </div>;
+}
 function ExtendRental({ booking, onClose, onSaved }: { booking: Booking; onClose: () => void; onSaved: (paymentLink?: string) => Promise<void> }) {
   const [hours, setHours] = useState('0.5');
   const [amount, setAmount] = useState('');

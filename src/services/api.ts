@@ -7,8 +7,10 @@ export interface User {
 }
 
 export interface Paginated<T> { items: T[]; total: number; page: number; page_size: number; total_pages: number }
-export interface Driver { id: number; first_name: string; last_name: string; phone_number: string; is_active: boolean; vehicle: Vehicle | null }
-export interface Vehicle { id: number; license_plate: string; vehicle_model: string; service_class: VehicleClass | null; driver_id: number | null; is_active: boolean }
+export type FleetSource = 'internal' | 'b2b';
+export interface TransportSupplier { id: number; name: string; contact_name: string | null; phone: string | null; email: string | null; payment_terms: string | null; approval_status: 'approved' | 'provisional' | 'suspended'; notes: string | null; is_active: boolean; vehicle_count: number; driver_count: number }
+export interface Driver { id: number; first_name: string; last_name: string; email: string | null; phone_number: string; is_active: boolean; source_type: FleetSource; supplier_id: number | null; supplier_name: string | null; app_access_enabled: boolean; vehicle: Vehicle | null }
+export interface Vehicle { id: number; license_plate: string; vehicle_model: string; service_class: VehicleClass | null; driver_id: number | null; is_active: boolean; source_type: FleetSource; supplier_id: number | null; supplier_name: string | null }
 export interface Partner { id: number; name: string; partner_type: string; email: string | null; phone: string | null; address: string | null; representative: string | null; billing_email: string | null; tax_id: string | null; notes: string | null; is_active: boolean; contactsCount: number }
 export interface Place { address: string; label?: string; lat: number; lng: number }
 export interface PlaceSuggestion { placeId: string; description: string; mainText: string; secondaryText: string }
@@ -52,6 +54,14 @@ export interface Booking {
   bookingType: string | null;
   serviceType: ServiceType;
   assignmentStatus: 'unassigned' | 'assigned' | 'accepted' | 'rejected';
+  assignmentSource: 'unassigned' | FleetSource;
+  assignedVehicleId: number | null;
+  transportSupplierId: number | null;
+  transportSupplierName: string | null;
+  supplierCost: number | null;
+  supplierCostCurrency: string;
+  supplierReference: string | null;
+  supplierCostStatus: string | null;
   financialDisposition: 'standard' | 'cancelled_non_chargeable' | 'no_show_chargeable';
   vehicleClass: VehicleClass | null;
   bookingLabel: string | null;
@@ -103,6 +113,9 @@ export type AdjustmentCategory = 'salik' | 'parking' | 'airport_fee' | 'waiting_
 export interface BookingPayload {
   driver_id: number | null;
   vehicle_id: number | null;
+  assignment_source?: FleetSource | null;
+  supplier_cost?: number | null;
+  supplier_reference?: string | null;
   partner_id?: number | null;
   account_id?: number | null;
   booking_type: string;
@@ -193,6 +206,10 @@ export async function login(email: string, password: string): Promise<string> {
 export function me(): Promise<User> { return request('/auth/me'); }
 export function listDrivers(): Promise<Paginated<Driver>> { return request('/dashboard/drivers?page=1&page_size=200&is_active=true'); }
 export function listVehicles(): Promise<Paginated<Vehicle>> { return request('/dashboard/vehicles?page=1&page_size=200&is_active=true'); }
+export function listTransportSuppliers(): Promise<Paginated<TransportSupplier>> { return request('/dashboard/transport-suppliers?page=1&page_size=200&is_active=true'); }
+export function createTransportSupplier(payload: { name: string; contact_name?: string | null; phone?: string | null; email?: string | null; payment_terms?: string | null; approval_status?: 'approved' | 'provisional' | 'suspended'; notes?: string | null; is_active?: boolean }): Promise<TransportSupplier> { return request('/dashboard/transport-suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+export function createFleetVehicle(payload: { license_plate: string; vehicle_model: string; service_class?: VehicleClass | null; source_type?: FleetSource; supplier_id?: number | null; is_active?: boolean; notes?: string | null }): Promise<Vehicle> { return request('/dashboard/vehicles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
+export function createFleetDriver(payload: { name: string; email?: string | null; phone_number: string; source_type?: FleetSource; supplier_id?: number | null }): Promise<Driver> { return request('/dashboard/drivers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function listPartners(activeOnly = true): Promise<Paginated<Partner>> { return request(`/dashboard/booking-partners?page=1&page_size=200${activeOnly ? '&is_active=true' : ''}`); }
 export function createPartner(payload: Omit<Partner, 'id' | 'contactsCount'>): Promise<Partner> { return request('/dashboard/booking-partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function updatePartner(id: number, payload: Omit<Partner, 'id' | 'contactsCount'>): Promise<Partner> { return request(`/dashboard/booking-partners/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }

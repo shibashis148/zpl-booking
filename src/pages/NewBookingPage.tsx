@@ -75,7 +75,7 @@ export default function NewBookingPage() {
 
   useEffect(() => {
     let active = true;
-    void Promise.all([listDrivers(), listVehicles(), listPartners(), listTransportSuppliers()]).then(([d, v, p, s]) => { if (active) { setDrivers(d.items); setVehicles(v.items); setPartners(p.items); setSuppliers(s.items); } }).catch((value) => { if (active) setError(value instanceof Error ? value.message : 'Could not load booking options.'); }).finally(() => { if (active) setLoading(false); });
+    void Promise.all([listDrivers('internal'), listDrivers('b2b'), listVehicles('internal'), listVehicles('b2b'), listPartners(), listTransportSuppliers()]).then(([internalDrivers, b2bDrivers, internalVehicles, b2bVehicles, p, s]) => { if (active) { setDrivers([...internalDrivers.items, ...b2bDrivers.items]); setVehicles([...internalVehicles.items, ...b2bVehicles.items]); setPartners(p.items); setSuppliers(s.items); } }).catch((value) => { if (active) setError(value instanceof Error ? value.message : 'Could not load booking options.'); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
 

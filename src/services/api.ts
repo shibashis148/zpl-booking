@@ -204,8 +204,8 @@ export async function login(email: string, password: string): Promise<string> {
   return result.access_token;
 }
 export function me(): Promise<User> { return request('/auth/me'); }
-export function listDrivers(): Promise<Paginated<Driver>> { return request('/dashboard/drivers?page=1&page_size=200&is_active=true'); }
-export function listVehicles(): Promise<Paginated<Vehicle>> { return request('/dashboard/vehicles?page=1&page_size=200&is_active=true'); }
+export function listDrivers(sourceType: FleetSource = 'internal'): Promise<Paginated<Driver>> { return request(`/dashboard/drivers?page=1&page_size=200&is_active=true&source_type=${sourceType}`); }
+export function listVehicles(sourceType: FleetSource = 'internal'): Promise<Paginated<Vehicle>> { return request(`/dashboard/vehicles?page=1&page_size=200&is_active=true&source_type=${sourceType}`); }
 export function listTransportSuppliers(): Promise<Paginated<TransportSupplier>> { return request('/dashboard/transport-suppliers?page=1&page_size=200&is_active=true'); }
 export function createTransportSupplier(payload: { name: string; contact_name?: string | null; phone?: string | null; email?: string | null; payment_terms?: string | null; approval_status?: 'approved' | 'provisional' | 'suspended'; notes?: string | null; is_active?: boolean }): Promise<TransportSupplier> { return request('/dashboard/transport-suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }
 export function createFleetVehicle(payload: { license_plate: string; vehicle_model: string; service_class?: VehicleClass | null; source_type?: FleetSource; supplier_id?: number | null; is_active?: boolean; notes?: string | null }): Promise<Vehicle> { return request('/dashboard/vehicles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); }

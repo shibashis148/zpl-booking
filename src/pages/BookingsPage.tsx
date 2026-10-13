@@ -61,8 +61,8 @@ export default function BookingsPage() {
   useEffect(() => { void load(); }, [appliedQuery, page, status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let active = true;
-    void Promise.all([listDrivers(), listVehicles(), listPartners(), listTransportSuppliers()]).then(([driverRows, vehicleRows, partnerRows, supplierRows]) => {
-      if (active) { setDrivers(driverRows.items); setVehicles(vehicleRows.items); setPartners(partnerRows.items); setSuppliers(supplierRows.items); }
+    void Promise.all([listDrivers('internal'), listDrivers('b2b'), listVehicles('internal'), listVehicles('b2b'), listPartners(), listTransportSuppliers()]).then(([internalDriverRows, b2bDriverRows, internalVehicleRows, b2bVehicleRows, partnerRows, supplierRows]) => {
+      if (active) { setDrivers([...internalDriverRows.items, ...b2bDriverRows.items]); setVehicles([...internalVehicleRows.items, ...b2bVehicleRows.items]); setPartners(partnerRows.items); setSuppliers(supplierRows.items); }
     });
     return () => { active = false; };
   }, []);
